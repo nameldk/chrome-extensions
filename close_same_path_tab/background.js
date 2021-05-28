@@ -1,27 +1,31 @@
-function processTab(tab) {
-    let url = tab.pendingUrl;
-    if (!url.startsWith('http')) {
+function processTab(targetTab) {
+    let url = targetTab.pendingUrl || targetTab.url;
+    if (!url || !url.startsWith("http")) {
         return;
     }
     let urlObj = new URL(url);
-    let urlSearch = urlObj.origin + urlObj.pathname + '*';
+    let urlSearch = urlObj.origin + urlObj.pathname + "*";
     let queryOptions = {
-        url: urlSearch,
-        active: false,
+        url: urlSearch
     };
 
+    // https://developer.chrome.com/docs/extensions/reference/tabs/
     setTimeout(() => {
         chrome.tabs
             .query(queryOptions)
             .then((tabs) => {
-                // console.log('query', tabs)
                 if (!tabs.length) {
                     return;
                 }
-                let ids = tabs.map((v) => {
-                    return v.id;
+                let ids = [];
+                tabs.forEach(v => {
+                    if (v.id !== targetTab.id && v.id !== targetTab.openerTabId) {
+                        ids.push(v.id);
+                    }
                 });
-                chrome.tabs.remove(ids);
+                if (ids.length) {
+                    chrome.tabs.remove(ids);
+                }
             })
             .catch((error) => {
                 console.error(error);
@@ -31,14 +35,14 @@ function processTab(tab) {
 
 function setOpen() {
     chrome.storage.local.set({
-        opend: 1,
+        opened: 1,
     });
     chrome.tabs.onCreated.addListener(processTab);
 }
 
 function setClose() {
     chrome.storage.local.set({
-        opend: 0,
+        opened: 0,
     });
     chrome.tabs.onCreated.removeListener(processTab);
 }
@@ -55,11 +59,10 @@ function setTitle(txt) {
     });
 }
 
-function syncStat(reverse, forseOpen) {
-    chrome.storage.local.get('opend', (res) => {
-        // console.log(res);
-        let open = reverse ? !res.opend : res.opend;
-        if (forseOpen) {
+function syncStat(reverse, forceOpen) {
+    chrome.storage.local.get('opened', (res) => {
+        let open = reverse ? !res.opened : res.opened;
+        if (forceOpen) {
             open = 1;
         }
         if (open) {
