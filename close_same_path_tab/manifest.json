@@ -2,13 +2,13 @@
     "name": "Close Same Path Tab",
     "description": "close same path tab when open a new tab",
     "version": "1.0",
-    "manifest_version": 3,
+    "manifest_version": 2,
     "background": {
-        "service_worker": "background.js"
+        "scripts": ["background.js"]
     },
     "permissions": ["storage", "activeTab", "scripting", "tabs"],
 
-    "action": {
+    "browser_action": {
         "default_icon": {
             "16": "/images/favicon-16x16.png",
             "32": "/images/favicon-32x32.png",

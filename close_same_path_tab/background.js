@@ -1,7 +1,19 @@
+let isBindEvent = false;
+let isOpen = false;
+let isDebug = false;
+
+let log = isDebug ? console.log : () => {
+};
+
 function processTab(targetTab) {
-    let url = targetTab.pendingUrl || targetTab.url;
-    if (!url || !url.startsWith("http")) {
+    if (!isOpen) {
+        log('not open');
         return;
+    }
+    let url = targetTab.pendingUrl || targetTab.url;
+    log('targetTab:', targetTab);
+    if (!url || !url.startsWith("http")) {
+        return true;
     }
     let urlObj = new URL(url);
     let urlSearch = urlObj.origin + urlObj.pathname + "*";
@@ -10,57 +22,78 @@ function processTab(targetTab) {
     };
 
     // https://developer.chrome.com/docs/extensions/reference/tabs/
-    setTimeout(() => {
-        chrome.tabs
-            .query(queryOptions)
-            .then((tabs) => {
-                if (!tabs.length) {
-                    return;
-                }
-                let ids = [];
-                tabs.forEach(v => {
-                    if (v.id !== targetTab.id && v.id !== targetTab.openerTabId) {
-                        ids.push(v.id);
+    chrome.tabs
+        .query(queryOptions, function (tabs) {
+            log('tabs:', tabs);
+            if (!tabs.length) {
+                return true;
+            }
+            let updated = false;
+            let removeId = 0;
+            tabs.forEach(v => {
+                if (v.id !== targetTab.id && v.id !== targetTab.openerTabId) {
+                    if (!updated) {
+                        updated = true;
+                        log('update:', v);
+                        let updateKv = {
+                            active: true
+                        };
+                        if (v.url !== url) {
+                            updateKv.url = url;
+                        }
+                        chrome.tabs.update(v.id, updateKv);
+                        removeId = targetTab.id;
+                    } else {
+                        removeId = v.id;
                     }
-                });
-                if (ids.length) {
-                    chrome.tabs.remove(ids);
+                    log('remove:', removeId);
+                    chrome.tabs.remove(removeId);
                 }
-            })
-            .catch((error) => {
-                console.error(error);
             });
-    }, 100);
+        });
+    return true;
+}
+
+function bindEvent() {
+    if (!isBindEvent) {
+        chrome.tabs.onCreated.addListener(processTab);
+        isBindEvent = true;
+        log('bind Event');
+    }
 }
 
 function setOpen() {
     chrome.storage.local.set({
         opened: 1,
     });
-    chrome.tabs.onCreated.addListener(processTab);
+    isOpen = true;
+    log('set open');
+    bindEvent();
 }
 
 function setClose() {
     chrome.storage.local.set({
         opened: 0,
     });
-    chrome.tabs.onCreated.removeListener(processTab);
+    isOpen = false;
+    log('set close');
 }
 
 function setBadgeText(txt) {
-    chrome.action.setBadgeText({
+    chrome.browserAction.setBadgeText({
         text: txt,
     });
 }
 
 function setTitle(txt) {
-    chrome.action.setTitle({
+    chrome.browserAction.setTitle({
         title: txt,
     });
 }
 
 function syncStat(reverse, forceOpen) {
     chrome.storage.local.get('opened', (res) => {
+        log('get-opened', res);
         let open = reverse ? !res.opened : res.opened;
         if (forceOpen) {
             open = 1;
@@ -77,15 +110,30 @@ function syncStat(reverse, forceOpen) {
     });
 }
 
-function init() {
+function onInstalled(e) {
+    log('onInstalled', e);
     syncStat(0, 1);
-    chrome.action.onClicked.addListener(() => {
-        syncStat(1);
-    });
 }
 
-chrome.runtime.onInstalled.addListener(() => {
-    init(1);
-});
+function onStartup(e) {
+    log('onStartup', e);
+    syncStat();
+}
 
-init();
+function onClicked(e) {
+    log('onClicked', e);
+    syncStat(1);
+}
+
+function onSuspend() {
+    setTitle("...");
+    setBadgeText("...");
+}
+
+chrome.runtime.onInstalled.addListener(onInstalled);
+
+chrome.runtime.onStartup.addListener(onStartup);
+
+chrome.browserAction.onClicked.addListener(onClicked);
+
+chrome.runtime.onSuspend.addListener(onSuspend);
